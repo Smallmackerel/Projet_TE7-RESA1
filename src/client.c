@@ -1,9 +1,3 @@
-// vérifier la taille de déclaration des tableaux
-// s'occuper du nick_sender
-// gestion de la date
-// merge des codes serveurs et clients
-
-
 #include "common.h"
 #include "msg_struct.h"
 
@@ -16,7 +10,6 @@
 #include <sys/socket.h>
 #include <unistd.h>
 
-/* Taille maximale d'un message (saisie utilisateur ou payload reçu du serveur). */
 #define MAX_MESSAGE_SIZE 4096
 
 // valide un pseudo
@@ -58,7 +51,6 @@ int connect_to_server(const char *server_ip, const char *server_port) {
 
 	printf("Using server IPv4 address %s.\n", server_ip);
 
-	/* Remplissage de l'adresse du serveur (famille + adresse IP). */
 	memset(&server_address, 0, sizeof(server_address));
 	server_address.sin_family = AF_INET;
 	result = inet_aton(server_ip, &server_address.sin_addr);
@@ -67,12 +59,10 @@ int connect_to_server(const char *server_ip, const char *server_port) {
 		return -1;
 	}
 
-	/* Création de la socket TCP. */
 	socket_fd = socket(AF_INET, SOCK_STREAM, 0);
 	die(socket_fd, "socket");
 	printf("TCP socket created.\n");
 
-	/* Ajout du port (en ordre réseau) puis connexion. */
 	server_address.sin_port = htons((unsigned short)atoi(server_port));
 	result = connect(socket_fd, (struct sockaddr *)&server_address, sizeof(server_address));
 	die(result, "connect");
@@ -84,15 +74,12 @@ int receive_and_print_server_message(int socket_fd) {
     struct message s_message;
     char pld[MAX_MESSAGE_SIZE];
 
-    /* Lecture de l'en-tête (struct message). */
     if (read_from_socket(socket_fd, &s_message, sizeof(s_message)) == 0)
         return 0;
 
-    /* Longueur de payload incohérente : on arrête le client. */
     if (s_message.pld_len < 0 || s_message.pld_len > MAX_MESSAGE_SIZE)
         return 0;
 
-    /* Lecture puis affichage du payload, s'il y en a un. */
     if (s_message.pld_len > 0) {
         if (read_from_socket(socket_fd, pld, (size_t)s_message.pld_len) == 0)
             return 0;
