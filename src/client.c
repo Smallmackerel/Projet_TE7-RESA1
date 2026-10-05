@@ -22,6 +22,66 @@ int is_valid_nickname_char(char c) {
 	return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9');
 }
 
+int extract_nickname(const char *argument, char *nick_name) {
+	size_t nick_len = strcspn(argument, "\r\n");
+ 
+	if (nick_len == 0) {
+		fprintf(stderr, "Nickname is empty\n");
+		return 0;
+	}
+	if (nick_len >= NICK_LEN) { // gestion taille nickname (avec le '\0')
+		fprintf(stderr, "Nickname too long\n");
+		return 0;
+	}
+ 
+	for (size_t i = 0; i < nick_len; i++) { // gestion caractères spéciaux
+		if (!is_valid_nickname_char(argument[i])) {
+			fprintf(stderr, "Unexpected char in nickname !\n");
+			return 0;
+		}
+	}
+
+	memcpy(nick_name, argument, nick_len);
+	nick_name[nick_len] = '\0';
+	return 1;
+}
+
+int handle_nick_command(int socket_fd, struct message *s_message, char *message) {
+	char nick_name[NICK_LEN];
+ 
+	/* Format attendu : "/nick " suivi du pseudo. */
+	if (strncmp(message, "/nick ", 6) != 0) {
+		fprintf(stderr, "Usage: /nick <nickname>\n");
+		return 1;
+	}
+ 
+	if (!extract_nickname(message + 6, nick_name)) {
+		return 1;
+	}
+ 
+	s_message_completion(socket_fd, s_message, 0, "", NICKNAME_NEW, nick_name);
+	return 1;
+}
+ 
+/* Traitement de /whois <pseudo>. Return 1 to keep running. */
+int handle_whois_command(int socket_fd, struct message *s_message, char *message) {
+	char nick_name[NICK_LEN];
+ 
+	/* Format attendu : "/whois " suivi du pseudo. */
+	if (strncmp(message, "/whois ", 7) != 0) {
+		fprintf(stderr, "Usage: /whois <nickname>\n");
+		return 1;
+	}
+ 
+	if (!extract_nickname(message + 7, nick_name)) {
+		return 1;
+	}
+ 
+	s_message_completion(socket_fd, s_message, 0, "", NICKNAME_INFOS, nick_name);
+	return 1;
+}
+ 
+	
 int setup_connection(const char *server_ip, const char *server_port) {
 	int socket_fd;
 	int result;
@@ -109,7 +169,7 @@ int get_and_send_user_message(int socket_fd) {
 	}
 	
 	else if (strncmp(message, "/nick", 5) == 0) {
-			char nick_name[NICK_LEN];
+		char nick_name[NICK_LEN];
 		char *nick_start;
 		size_t nick_len;
 	
