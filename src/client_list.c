@@ -1,6 +1,10 @@
 #include "client_list.h"
 
 #include <stdlib.h>
+#include <time.h>
+
+
+
 
 int client_list_add(struct client_info **clients, int fd, const struct sockaddr_in *address) {
 	struct client_info *client = malloc(sizeof(*client));
@@ -10,6 +14,7 @@ int client_list_add(struct client_info **clients, int fd, const struct sockaddr_
 	client->fd = fd;
 	client->nick[0]='\0';//on initialise le nom avec le nom vide
 	client->address = *address;
+	client->time=time(NULL);
 	client->next = *clients;
 	*clients = client;
 	return 0;

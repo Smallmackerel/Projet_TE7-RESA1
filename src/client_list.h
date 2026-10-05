@@ -9,6 +9,7 @@ struct client_info {
   int fd;
   struct sockaddr_in address;
   char nick[NICK_LEN];
+  time_t time;
   struct client_info *next;
 };
 
