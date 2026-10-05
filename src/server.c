@@ -16,7 +16,7 @@
 #define MAX_CLIENTS 128
 
 //met a jour lheure
-void time_update(int client_fd, struct client_info **clients){
+void time_update(int client_fd,struct client_info **clients){
   struct client_info** cursor=clients;
   while(*cursor!=NULL){
     if (client_fd==(*cursor)->fd){
@@ -46,7 +46,7 @@ void unicast_send(struct client_info **clients, int client_fd, struct message re
   msg.type = UNICAST_SEND;
   
   while(*cursor!=NULL){
-    if (strcmp(received.nick_sender,(*cursor)->nick) == 0){ //eviter d'envoyer un message celui qui demande
+    if (strcmp(received.infos,(*cursor)->nick) == 0){ //eviter d'envoyer un message celui qui demande
       write_in_socket((*cursor)->fd, &msg, sizeof(struct message));
       write_in_socket((*cursor)->fd, payload, size);
       return;
@@ -59,7 +59,7 @@ void unicast_send(struct client_info **clients, int client_fd, struct message re
       msg_back.pld_len = sizeof(char*);
       msg_back.type = UNICAST_SEND;
       write_in_socket(client_fd, &msg_back, sizeof(struct message));
-      write_in_socket(client_fd, msg_error, sizeof(char)*strlen(msg_error));
+      write_in_socket(client_fd, msg_error, sizeof(char*));
 }
 
 void broadcast_send(struct client_info **clients, int client_fd,struct message received,char* payload){
@@ -84,22 +84,24 @@ void broadcast_send(struct client_info **clients, int client_fd,struct message r
 
 void nickname_infos(struct client_info **clients, int client_fd,struct message received){
   struct client_info** cursor=clients;
-  
   while(*cursor!=NULL){
     if (strcmp(received.infos,(*cursor)->nick)==0){
       struct message msg;
       struct sockaddr_in addr = (*cursor)->address;
       char ip_str[INET_ADDRSTRLEN];
+
       inet_ntop(AF_INET, &(addr.sin_addr), ip_str, INET_ADDRSTRLEN);
       int port = ntohs(addr.sin_port);
 
       struct tm* tm_info = localtime(&(*cursor)->time);
       char time[20];
+
       strftime(time,sizeof(time),"%Y-%m-%d %H:%M:%S",tm_info);
+
       char tab_msg[128];
       snprintf(tab_msg,sizeof(tab_msg),"%s %s:%d", time, ip_str,port);
       
-      msg.pld_len = sizeof(char)*128;
+      msg.pld_len = sizeof(char)*strlen(tab_msg);
       msg.type = NICKNAME_INFOS;
       write_in_socket(client_fd, &msg, sizeof(struct message));
       write_in_socket(client_fd, tab_msg , msg.pld_len);
@@ -153,7 +155,7 @@ void nickname_new(struct message msg, struct client_info **clients,int client_fd
       msg.pld_len = sizeof(char)*strlen(msg_error);
       msg.type = NICKNAME_NEW;
       write_in_socket(client_fd, &msg, sizeof(struct message));
-      write_in_socket(client_fd, msg_error, strlen(msg_error)*sizeof(char)); 
+      write_in_socket(client_fd, msg_error, sizeof(char)*strlen(msg_error)); 
       return;
     }
     cursor=&(*cursor)->next;    
@@ -163,12 +165,12 @@ void nickname_new(struct message msg, struct client_info **clients,int client_fd
   while(*cursor!=NULL){
     if ((*cursor)->fd == client_fd){
       strcpy((*cursor)->nick,msg.infos);
-      char* msg_error="Pseudo attribué";
+       char* msg_error="Pseudo attribué";
       struct message msg;
       msg.pld_len = sizeof(char)*strlen(msg_error);
       msg.type = NICKNAME_NEW;
       write_in_socket(client_fd, &msg, sizeof(struct message));
-      write_in_socket(client_fd, msg_error, strlen(msg_error)*sizeof(char)); 
+      write_in_socket(client_fd, msg_error, sizeof(char)*strlen(msg_error)); 
       return;
     }
     cursor=&(*cursor)->next;    
