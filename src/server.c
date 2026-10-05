@@ -151,7 +151,7 @@ void nickname_new(struct message msg, struct client_info **clients,int client_fd
       msg.pld_len = sizeof(char*);
       msg.type = NICKNAME_NEW;
       write_in_socket(client_fd, &msg, sizeof(struct message));
-      write_in_socket(client_fd, msg_error, sizeof(char*)); 
+      write_in_socket(client_fd, msg_error, strlen(msg_error)*sizeof(char)); 
       return;
     }
     cursor=&(*cursor)->next;    
@@ -161,6 +161,12 @@ void nickname_new(struct message msg, struct client_info **clients,int client_fd
   while(*cursor!=NULL){
     if ((*cursor)->fd == client_fd){
       strcpy((*cursor)->nick,msg.infos);
+      char* msg_error="Pseudo attribué";
+      struct message msg;
+      msg.pld_len = sizeof(char*);
+      msg.type = NICKNAME_NEW;
+      write_in_socket(client_fd, &msg, sizeof(struct message));
+      write_in_socket(client_fd, msg_error, strlen(msg_error)*sizeof(char)); 
       return;
     }
     cursor=&(*cursor)->next;    

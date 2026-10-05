@@ -112,10 +112,10 @@ int get_and_send_user_message(int socket_fd) {
 		}
 		strcpy(nick_name, message + 6);
 		for (int i = 0; i< (int)strlen(nick_name); i++){// gestion caracères spéciaux
-			if(!(((65 <= nick_name[i]) && (nick_name[i] <= 90)) || ((97 <= nick_name[i]) && (nick_name[i] <= 122)) || ((48 <= nick_name[i]) && (nick_name[i] <= 57)))){ // Ascii encoding for char check
-				fprintf(stderr, "Unexpected char in pseudo !");
-				return 1;
-			}
+			// if(!(((65 <= nick_name[i]) && (nick_name[i] <= 90)) || ((97 <= nick_name[i]) && (nick_name[i] <= 122)) || ((48 <= nick_name[i]) && (nick_name[i] <= 57)))){ // Ascii encoding for char check
+			// 	fprintf(stderr, "Unexpected char in pseudo !");
+			// 	return 1;
+			// }
 
 		}
 		s_message_completion(socket_fd, s_message, 0, "", NICKNAME_NEW, nick_name); 
@@ -133,10 +133,10 @@ int get_and_send_user_message(int socket_fd) {
 		}
 		strcpy(nick_name, message + 6);
 		for (int i = 0; i< (int)strlen(nick_name); i++){ // gestion caracères spéciaux
-			if(!(((65 <= nick_name[i]) && (nick_name[i] <= 90)) || ((97 <= nick_name[i]) && (nick_name[i] <= 122)) || ((48 <= nick_name[i]) && (nick_name[i] <= 57)))){ // Ascii encoding for char check
-				fprintf(stderr, "Unexpected char in pseudo !");
-				return 1;
-			}
+			// if(!(((65 <= nick_name[i]) && (nick_name[i] <= 90)) || ((97 <= nick_name[i]) && (nick_name[i] <= 122)) || ((48 <= nick_name[i]) && (nick_name[i] <= 57)))){ // Ascii encoding for char check
+			// 	fprintf(stderr, "Unexpected char in pseudo !");
+			// 	return 1;
+			// }
 		}
 		s_message_completion(socket_fd, s_message, 0, "", NICKNAME_INFOS, nick_name); 
 	}
