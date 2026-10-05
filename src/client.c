@@ -18,6 +18,10 @@
 
 #define MAX_MESSAGE_SIZE 4096
 
+int is_valid_nickname_char(char c) {
+	return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9');
+}
+
 int setup_connection(const char *server_ip, const char *server_port) {
 	int socket_fd;
 	int result;
@@ -105,24 +109,43 @@ int get_and_send_user_message(int socket_fd) {
 	}
 	
 	else if (strncmp(message, "/nick", 5) == 0) {
-		char nick_name[NICK_LEN];
-		if(message_size +1 > 6 + NICK_LEN){ // gestion taille nickname
-			fprintf(stdout,"Nick name too long (spaces might be the reason)");
+			char nick_name[NICK_LEN];
+		char *nick_start;
+		size_t nick_len;
+	
+		if (strncmp(message, "/nick ", 6) != 0) {
+			fprintf(stderr, "Usage: /nick <nickname>\n");
 			return 1;
 		}
-		strcpy(nick_name, message + 6);
-		for (int i = 0; i< (int)strlen(nick_name); i++){// gestion caracères spéciaux
-			// if(!(((65 <= nick_name[i]) && (nick_name[i] <= 90)) || ((97 <= nick_name[i]) && (nick_name[i] <= 122)) || ((48 <= nick_name[i]) && (nick_name[i] <= 57)))){ // Ascii encoding for char check
-			// 	fprintf(stderr, "Unexpected char in pseudo !");
-			// 	return 1;
-			// }
-
-		}
-		s_message_completion(socket_fd, s_message, 0, "", NICKNAME_NEW, nick_name); 
-	}
 	
-	else if (strcmp(message, "/who") == 0 || strcmp(message, "/who\n") == 0) {
-		s_message_completion(socket_fd, s_message, 0, "", NICKNAME_LIST, ""); 
+		/* Le pseudo s'étend jusqu'au retour à la ligne (ou jusqu'à la fin de la saisie). */
+		nick_start = message + 6;
+		nick_len = strcspn(nick_start, "\r\n");
+	
+		if (nick_len == 0) {
+			fprintf(stderr, "Usage: /nick <nickname>\n");
+			return 1;
+		}
+		if (nick_len >= NICK_LEN) { // gestion taille nickname (avec le '\0')
+			fprintf(stderr, "Nickname too long\n");
+			return 1;
+		}
+	
+		for (size_t i = 0; i < nick_len; i++) { // gestion caractères spéciaux
+			if (!is_valid_nickname_char(nick_start[i])) {
+				fprintf(stderr, "Unexpected char in nickname !\n");
+				return 1;
+			}
+		}
+	
+		memcpy(nick_name, nick_start, nick_len);
+		nick_name[nick_len] = '\0';
+	
+		s_message_completion(socket_fd, s_message, 0, "", NICKNAME_NEW, nick_name);
+		}
+		
+		else if (strcmp(message, "/who") == 0 || strcmp(message, "/who\n") == 0) {
+			s_message_completion(socket_fd, s_message, 0, "", NICKNAME_LIST, ""); 
 	}
 	
 	else if (strncmp(message, "/whois", 6) == 0) {
@@ -133,10 +156,10 @@ int get_and_send_user_message(int socket_fd) {
 		}
 		strcpy(nick_name, message + 6);
 		for (int i = 0; i< (int)strlen(nick_name); i++){ // gestion caracères spéciaux
-			// if(!(((65 <= nick_name[i]) && (nick_name[i] <= 90)) || ((97 <= nick_name[i]) && (nick_name[i] <= 122)) || ((48 <= nick_name[i]) && (nick_name[i] <= 57)))){ // Ascii encoding for char check
-			// 	fprintf(stderr, "Unexpected char in pseudo !");
-			// 	return 1;
-			// }
+			if(!(((65 <= nick_name[i]) && (nick_name[i] <= 90)) || ((97 <= nick_name[i]) && (nick_name[i] <= 122)) || ((48 <= nick_name[i]) && (nick_name[i] <= 57)))){ // Ascii encoding for char check
+				fprintf(stderr, "Unexpected char in pseudo !");
+				return 1;
+			}
 		}
 		s_message_completion(socket_fd, s_message, 0, "", NICKNAME_INFOS, nick_name); 
 	}
@@ -151,27 +174,39 @@ int get_and_send_user_message(int socket_fd) {
 		}
 	}
 	else if (strncmp(message, "/msg", 4) == 0) {//
-		int i = 5;
-		int j = 0;
 		char nickname[NICK_LEN];
-		while(message[i] != ' ' && message[i] != 0 && j<NICK_LEN-1){ // vérification que j < NICK_LEN
-			j++;
-			i++;
-		}
-		if(j> NICK_LEN){
-			fprintf(stdout, "Incorrect nickname");
+		char *nick_start;
+		char *nick_end;
+		char *content;
+		size_t nick_len;
+		size_t content_len;
+
+		if (strncmp(message, "/msg ", 5) != 0) {
+			fprintf(stdout, "Usage: /msg <nickname> <message>\n");
 			return 1;
 		}
-		i = 5;
-		j = 0;
-		while(message[i] != ' '){ // C'est coûteux de faire deux fois ce parcours, je n'ai pas encore mieux
-			nickname[j] = message[i];
-			j++;
-			i++;
+
+		nick_start = message + 5;
+		nick_end = strchr(nick_start, ' ');
+		if (nick_end == NULL) {
+			fprintf(stdout, "Usage: /msg <nickname> <message>\n");
+			return 1;
 		}
-		char* message_content = message + 5 + j + 1; //5 pour "/msg ", j pour la longeur du pseudo, 1 pour l'espace avant le message
-		s_message_completion(socket_fd, s_message, strlen(message_content), "", UNICAST_SEND, nickname);
-		if (write_in_socket(socket_fd, &message_content, strlen(message_content)) == 0) {
+
+		nick_len = (size_t)(nick_end - nick_start);
+		if (nick_len == 0 || nick_len >= NICK_LEN) { // vérification que le pseudo tient dans NICK_LEN (avec le '\0')
+			fprintf(stdout, "Incorrect nickname\n");
+			return 1;
+		}
+		memcpy(nickname, nick_start, nick_len);
+		nickname[nick_len] = '\0';
+
+		/* Le contenu du message commence juste après l'espace qui suit le pseudo. */
+		content = nick_end + 1;
+		content_len = strlen(content);
+
+		s_message_completion(socket_fd, s_message, (int)content_len, "", UNICAST_SEND, nickname);
+		if (write_in_socket(socket_fd, content, content_len) == 0) {
 			return 0;
 		}
 	}
