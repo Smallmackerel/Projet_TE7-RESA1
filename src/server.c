@@ -16,7 +16,7 @@
 #define MAX_CLIENTS 128
 
 //met a jour lheure
-void time_update(int client_fd,struct client_info **clients){
+void time_update(int client_fd, struct client_info **clients){
   struct client_info** cursor=clients;
   while(*cursor!=NULL){
     if (client_fd==(*cursor)->fd){
@@ -59,7 +59,7 @@ void unicast_send(struct client_info **clients, int client_fd, struct message re
       msg_back.pld_len = sizeof(char*);
       msg_back.type = UNICAST_SEND;
       write_in_socket(client_fd, &msg_back, sizeof(struct message));
-      write_in_socket(client_fd, msg_error, sizeof(char*));
+      write_in_socket(client_fd, msg_error, sizeof(char)*strlen(msg_error));
 }
 
 void broadcast_send(struct client_info **clients, int client_fd,struct message received,char* payload){
@@ -153,7 +153,7 @@ void nickname_new(struct message msg, struct client_info **clients,int client_fd
       msg.pld_len = sizeof(char)*strlen(msg_error);
       msg.type = NICKNAME_NEW;
       write_in_socket(client_fd, &msg, sizeof(struct message));
-      write_in_socket(client_fd, msg_error, sizeof(char)*strlen(msg_error)); 
+      write_in_socket(client_fd, msg_error, strlen(msg_error)*sizeof(char)); 
       return;
     }
     cursor=&(*cursor)->next;    
@@ -163,12 +163,12 @@ void nickname_new(struct message msg, struct client_info **clients,int client_fd
   while(*cursor!=NULL){
     if ((*cursor)->fd == client_fd){
       strcpy((*cursor)->nick,msg.infos);
-       char* msg_error="Pseudo attribué";
+      char* msg_error="Pseudo attribué";
       struct message msg;
       msg.pld_len = sizeof(char)*strlen(msg_error);
       msg.type = NICKNAME_NEW;
       write_in_socket(client_fd, &msg, sizeof(struct message));
-      write_in_socket(client_fd, msg_error, sizeof(char)*strlen(msg_error)); 
+      write_in_socket(client_fd, msg_error, strlen(msg_error)*sizeof(char)); 
       return;
     }
     cursor=&(*cursor)->next;    
