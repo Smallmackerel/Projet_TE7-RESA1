@@ -46,7 +46,7 @@ void unicast_send(struct client_info **clients, int client_fd, struct message re
   msg.type = UNICAST_SEND;
   
   while(*cursor!=NULL){
-    if (strcmp(received.nick_sender,(*cursor)->nick) ==0){ //eviter d'envoyer un message celui qui demande
+    if (strcmp(received.nick_sender,(*cursor)->nick) == 0){ //eviter d'envoyer un message celui qui demande
       write_in_socket((*cursor)->fd, &msg, sizeof(struct message));
       write_in_socket((*cursor)->fd, payload, size);
       return;
@@ -99,7 +99,7 @@ void nickname_infos(struct client_info **clients, int client_fd,struct message r
       char tab_msg[128];
       snprintf(tab_msg,sizeof(tab_msg),"%s %s:%d", time, ip_str,port);
       
-      msg.pld_len = sizeof(tab_msg);
+      msg.pld_len = sizeof(char)*128;
       msg.type = NICKNAME_INFOS;
       write_in_socket(client_fd, &msg, sizeof(struct message));
       write_in_socket(client_fd, tab_msg , msg.pld_len);
@@ -119,24 +119,26 @@ void nickname_list(struct client_info **clients, int client_fd){
     size++;
     cursor=&(*cursor)->next;
   }
-  char** tab_name=malloc(size*sizeof(char*));
-  int j=0;
+  char tab_name[MAX_CLIENTS][NICK_LEN];
   cursor=clients;
+  int index_client=0;
+  
   //on stocke tous les noms dans le tableau
   while(*cursor!=NULL){
-    if (client_fd != (*cursor)->fd){ //eviter de renvoyer le nom de celui qui demande
-      strcpy(tab_name[j],(*cursor)->nick);
-      j++;
-    }
+    // if (client_fd != (*cursor)->fd){ //eviter de renvoyer le nom de celui qui demande
+      snprintf(tab_name[index_client],sizeof(char)*(strlen((*cursor)->nick)+1),"%s", (*cursor)->nick);
+      index_client++;
+      // }
     cursor=&(*cursor)->next;
   }
   struct message msg;
-  msg.pld_len = size*sizeof(char*);
+  msg.pld_len = (size)*(sizeof(char)*NICK_LEN);
   msg.type = NICKNAME_LIST;
   write_in_socket(client_fd, &msg, sizeof(struct message));
-  write_in_socket(client_fd, tab_name, size*sizeof(char*));
-  free(tab_name);
+  write_in_socket(client_fd, tab_name,(size)*(sizeof(char)*NICK_LEN) );
 }
+
+
 
 //ajoute/modifie un nom.
 void nickname_new(struct message msg, struct client_info **clients,int client_fd){
@@ -148,10 +150,10 @@ void nickname_new(struct message msg, struct client_info **clients,int client_fd
     if (strcmp((*cursor)->nick,msg.infos) == 0){
       char* msg_error="Pseudo déjà attribué";
       struct message msg;
-      msg.pld_len = sizeof(char*);
+      msg.pld_len = sizeof(char)*strlen(msg_error);
       msg.type = NICKNAME_NEW;
       write_in_socket(client_fd, &msg, sizeof(struct message));
-      write_in_socket(client_fd, msg_error, sizeof(char*)); 
+      write_in_socket(client_fd, msg_error, sizeof(char)*strlen(msg_error)); 
       return;
     }
     cursor=&(*cursor)->next;    
@@ -161,6 +163,12 @@ void nickname_new(struct message msg, struct client_info **clients,int client_fd
   while(*cursor!=NULL){
     if ((*cursor)->fd == client_fd){
       strcpy((*cursor)->nick,msg.infos);
+       char* msg_error="Pseudo attribué";
+      struct message msg;
+      msg.pld_len = sizeof(char)*strlen(msg_error);
+      msg.type = NICKNAME_NEW;
+      write_in_socket(client_fd, &msg, sizeof(struct message));
+      write_in_socket(client_fd, msg_error, sizeof(char)*strlen(msg_error)); 
       return;
     }
     cursor=&(*cursor)->next;    
