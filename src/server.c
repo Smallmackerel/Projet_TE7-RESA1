@@ -54,7 +54,7 @@ void unicast_send(struct client_info **clients, int client_fd, struct message re
     cursor=&(*cursor)->next;
   }
   //gerer le cas ou il na pas destinataire
-  char* msg_error="Pseudo du destinataire non attribué";
+  char* msg_error="Pseudo du destinataire non attribué\n";
       struct message msg_back;
       msg_back.pld_len = sizeof(char*);
       msg_back.type = UNICAST_SEND;

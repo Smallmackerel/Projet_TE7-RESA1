@@ -11,6 +11,53 @@
 #include <sys/socket.h>
 #include <unistd.h>
 
+int connect_to_server(const char *server_ip, const char *server_port) {
+	int socket_fd;
+	int result;
+	struct sockaddr_in server_address;
+
+	printf("Using server IPv4 address %s.\n", server_ip);
+
+	memset(&server_address, 0, sizeof(server_address));
+	server_address.sin_family = AF_INET;
+	result = inet_aton(server_ip, &server_address.sin_addr);
+	if (result == 0) {
+		fprintf(stderr, "Invalid IPv4 address: %s\n", server_ip);
+		return -1;
+	}
+
+	socket_fd = socket(AF_INET, SOCK_STREAM, 0);
+	die(socket_fd, "socket");
+	printf("TCP socket created.\n");
+
+	server_address.sin_port = htons((unsigned short)atoi(server_port));
+	result = connect(socket_fd, (struct sockaddr *)&server_address, sizeof(server_address));
+	die(result, "connect");
+	printf("Connected to %s:%s.\n", inet_ntoa(server_address.sin_addr), server_port);
+	return socket_fd;
+}
+
+int receive_and_print_server_message(int socket_fd) {
+    struct message s_message;
+    char pld[MAX_MESSAGE_SIZE];
+
+    if (read_from_socket(socket_fd, &s_message, sizeof(s_message)) == 0)
+        return 0;
+
+    if (s_message.pld_len < 0 || s_message.pld_len > MAX_MESSAGE_SIZE)
+        return 0;
+
+    if (s_message.pld_len > 0) {
+        if (read_from_socket(socket_fd, pld, (size_t)s_message.pld_len) == 0)
+            return 0;
+
+        write(STDOUT_FILENO, pld, (size_t)s_message.pld_len);
+		printf("\n");
+    }
+
+    return 1;
+}
+
 // gère les entrées et détecte les commandes
 int read_user_input_and_send_to_server(int socket_fd) {
 	char message[MAX_MESSAGE_SIZE + 1];
