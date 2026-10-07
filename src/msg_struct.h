@@ -1,5 +1,6 @@
 #define NICK_LEN 128
 #define INFOS_LEN 128
+#define MAX_MESSAGE_SIZE 4096
 
 enum msg_type { 
 	NICKNAME_NEW,
