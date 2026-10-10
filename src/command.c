@@ -201,7 +201,7 @@ int send_echo_message(int socket_fd, struct message *s_message, char *message, i
 	return 1;
 }
 
-int send_send_message(int socket_fd, struct message *s_message, char* message) {//
+int send_send_message(int socket_fd, struct message *s_message, char *message) {
 	char nickname[NICK_LEN];
 	char *nickname_start;
 	char *nickname_end;
@@ -228,11 +228,16 @@ int send_send_message(int socket_fd, struct message *s_message, char* message) {
 
 	/* Le nom du fichier commence juste après l'espace qui suit le pseudo. */
 	content = nickname_end + 1;
-	int int_content = atoi(content);
-	content_length = sizeof(int_content);
+	content_length = strcspn(content, "\r\n");
+	if (content_length == 0) {
+		fprintf(stderr, "Usage: /send <nickname> <file_name>\n");
+		return 1;
+	}
 
 	/* Envoi de l'en-tête (pseudo destinataire dans infos), puis du payload. */
-	fill_and_send_message_header(socket_fd, s_message, (int)content_length, "", FILE_REQUEST, nickname);
+	if (!fill_and_send_message_header(socket_fd, s_message, (int)content_length, "", FILE_REQUEST, nickname)) {
+		return 0;
+	}
 	if (write_in_socket(socket_fd, content, content_length) == 0) {
 		return 0;
 	}

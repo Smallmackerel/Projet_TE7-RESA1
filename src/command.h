@@ -10,4 +10,4 @@ int send_nickname_info_request(int socket_fd, struct message *s_message, char *m
 int send_broadcast_message(int socket_fd, struct message *s_message, char *message);
 int send_private_message(int socket_fd, struct message *s_message, char *message);
 int send_echo_message(int socket_fd, struct message *s_message, char *message, int message_size);
-int send_send_message(int socket_fd, struct message *s_message, char *message, int file_size);
+int send_send_message(int socket_fd, struct message *s_message, char *message);

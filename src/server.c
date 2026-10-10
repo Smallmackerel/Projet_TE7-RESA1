@@ -20,25 +20,58 @@ void file_request_send(struct client_info **clients, int client_fd, struct messa
   struct client_info** cursor=clients;
   int size = received.pld_len;
   struct message msg;
+  const char *sender_nick = "";
+  memset(&msg, 0, sizeof(msg));
   msg.pld_len = size;
-  strcpy(msg.nick_sender,received.nick_sender);
   msg.type = FILE_REQUEST;
   
+  for (cursor = clients; *cursor != NULL; cursor = &(*cursor)->next) {
+    if ((*cursor)->fd == client_fd) {
+      sender_nick = (*cursor)->nick;
+      break;
+    }
+  }
+  snprintf(msg.nick_sender, sizeof(msg.nick_sender), "%s", sender_nick);
+
+  cursor = clients;
   while(*cursor!=NULL){
     if (strcmp(received.infos,(*cursor)->nick) == 0){ //eviter d'envoyer un message celui qui demande
-      write_in_socket((*cursor)->fd, &msg, sizeof(struct message));
-      write_in_socket((*cursor)->fd, payload, size);
+      snprintf(msg.infos, sizeof(msg.infos), "%s", (*cursor)->nick);
+      if (write_in_socket((*cursor)->fd, &msg, sizeof(msg)) == 0 ||
+          write_in_socket((*cursor)->fd, payload, (size_t)size) == 0) {
+        fprintf(stderr, "Failed to forward file request to %s.\n", (*cursor)->nick);
+      }
       return;
     }
     cursor=&(*cursor)->next;
   }
-  //gerer le cas ou il na pas destinataire
-  char* msg_error="Pseudo du destinataire non attribué\n";
+  const char *msg_error = "Recipient nickname not found.\n";
   struct message msg_back;
-  msg_back.pld_len = sizeof(char*);
+  memset(&msg_back, 0, sizeof(msg_back));
+  msg_back.pld_len = (int)strlen(msg_error);
   msg_back.type = UNICAST_SEND;
-  write_in_socket(client_fd, &msg_back, sizeof(struct message));
-  write_in_socket(client_fd, msg_error, sizeof(char*));
+  if (write_in_socket(client_fd, &msg_back, sizeof(msg_back)) == 0 ||
+      write_in_socket(client_fd, (void *)msg_error, (size_t)msg_back.pld_len) == 0) {
+    fprintf(stderr, "Failed to report missing file-request recipient.\n");
+  }
+}
+
+void file_response_forward(struct client_info **clients, struct message received,
+                           const char *payload) {
+  struct client_info **cursor = clients;
+
+  while (*cursor != NULL) {
+    if (strcmp(received.infos, (*cursor)->nick) == 0) {
+      if (write_in_socket((*cursor)->fd, &received, sizeof(received)) == 0 ||
+          (received.pld_len > 0 &&
+           write_in_socket((*cursor)->fd, (void *)payload, (size_t)received.pld_len) == 0)) {
+        fprintf(stderr, "Failed to forward file response to %s.\n", (*cursor)->nick);
+      }
+      return;
+    }
+    cursor = &(*cursor)->next;
+  }
+  fprintf(stderr, "File-response recipient %s was not found.\n", received.infos);
 }
 
 
@@ -225,16 +258,18 @@ void action(struct message msg, struct client_info **clients,int client_fd,char*
   case BROADCAST_SEND:
     broadcast_send(clients,client_fd,msg,payload);
     break;
-  case MULTICAST_CREATE:
-  case  MULTICAST_LIST:
-  case  MULTICAST_JOIN:
-  case  MULTICAST_SEND:
-  case  MULTICAST_QUIT:
   case  FILE_REQUEST:
     file_request_send(clients,client_fd,msg, payload);
     break;
   case  FILE_ACCEPT:
   case  FILE_REJECT:
+    file_response_forward(clients, msg, payload);
+    break;
+  case MULTICAST_CREATE:
+  case MULTICAST_LIST:
+  case MULTICAST_JOIN:
+  case MULTICAST_SEND:
+  case MULTICAST_QUIT:
   case  FILE_SEND:
   case FILE_ACK:
   default:
