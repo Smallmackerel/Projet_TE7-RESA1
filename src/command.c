@@ -200,3 +200,21 @@ int send_echo_message(int socket_fd, struct message *s_message, char *message, i
 	}
 	return 1;
 }
+
+int send_send_message(int socket_fd, struct message *s_message, char *message, int file_size){
+	char nickname[NICK_LEN];
+
+	/* Format attendu : "/send " suivi du pseudo. */
+	if (strncmp(message, "/send ", 6) != 0) {
+		fprintf(stderr, "Usage: /send <nickname>\n");
+		return 1;
+	}
+
+	/* Le pseudo commence après "/send " (7 caractères). */
+	if (!extract_nickname_from_argument(message + 7, nickname)) {
+		return 1;
+	}
+
+	fill_and_send_message_header(socket_fd, s_message, file_size, "", FILE_REQUEST, nickname);
+	return 1;
+}
