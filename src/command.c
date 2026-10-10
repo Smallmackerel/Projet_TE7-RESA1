@@ -201,20 +201,40 @@ int send_echo_message(int socket_fd, struct message *s_message, char *message, i
 	return 1;
 }
 
-int send_send_message(int socket_fd, struct message *s_message, char *message, int file_size){
+int send_send_message(int socket_fd, struct message *s_message, char* message) {//
 	char nickname[NICK_LEN];
+	char *nickname_start;
+	char *nickname_end;
+	char *content;
+	size_t content_length;
 
-	/* Format attendu : "/send " suivi du pseudo. */
+	/* Format attendu : "/send " suivi du pseudo, d'un espace, puis du nom de fichier. */
 	if (strncmp(message, "/send ", 6) != 0) {
-		fprintf(stderr, "Usage: /send <nickname>\n");
+		fprintf(stderr, "Usage: /send <nickname> <file_name>\n");
 		return 1;
 	}
 
-	/* Le pseudo commence après "/send " (7 caractères). */
-	if (!extract_nickname_from_argument(message + 7, nickname)) {
+	/* Le pseudo s'étend de la fin de "/send " jusqu'au premier espace suivant. */
+	nickname_start = message + 6;
+	nickname_end = strchr(nickname_start, ' ');
+	if (nickname_end == NULL) {
+		fprintf(stderr, "Usage: /send <nickname> <file_name>\n");
 		return 1;
 	}
 
-	fill_and_send_message_header(socket_fd, s_message, file_size, "", FILE_REQUEST, nickname);
+	if (!validate_and_copy_nickname(nickname_start, (size_t)(nickname_end - nickname_start), nickname)) { // vérification que le pseudo est valide et tient dans NICK_LEN
+		return 1;
+	}
+
+	/* Le nom du fichier commence juste après l'espace qui suit le pseudo. */
+	content = nickname_end + 1;
+	int int_content = atoi(content);
+	content_length = sizeof(int_content);
+
+	/* Envoi de l'en-tête (pseudo destinataire dans infos), puis du payload. */
+	fill_and_send_message_header(socket_fd, s_message, (int)content_length, "", FILE_REQUEST, nickname);
+	if (write_in_socket(socket_fd, content, content_length) == 0) {
+		return 0;
+	}
 	return 1;
 }
