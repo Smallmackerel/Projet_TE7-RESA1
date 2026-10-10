@@ -15,6 +15,33 @@
 #define MAX_MESSAGE_SIZE 4096
 #define MAX_CLIENTS 128
 
+
+void file_request_send(struct client_info **clients, int client_fd, struct message received, char* payload){
+  struct client_info** cursor=clients;
+  int size = received.pld_len;
+  struct message msg;
+  msg.pld_len = size;
+  strcpy(msg.nick_sender,received.nick_sender);
+  msg.type = FILE_REQUEST;
+  
+  while(*cursor!=NULL){
+    if (strcmp(received.infos,(*cursor)->nick) == 0){ //eviter d'envoyer un message celui qui demande
+      write_in_socket((*cursor)->fd, &msg, sizeof(struct message));
+      write_in_socket((*cursor)->fd, payload, size);
+      return;
+    }
+    cursor=&(*cursor)->next;
+  }
+  //gerer le cas ou il na pas destinataire
+  char* msg_error="Pseudo du destinataire non attribué\n";
+  struct message msg_back;
+  msg_back.pld_len = sizeof(char*);
+  msg_back.type = UNICAST_SEND;
+  write_in_socket(client_fd, &msg_back, sizeof(struct message));
+  write_in_socket(client_fd, msg_error, sizeof(char*));
+}
+
+
 //met a jour lheure
 void time_update(int client_fd,struct client_info **clients){
   struct client_info** cursor=clients;
@@ -204,6 +231,8 @@ void action(struct message msg, struct client_info **clients,int client_fd,char*
   case  MULTICAST_SEND:
   case  MULTICAST_QUIT:
   case  FILE_REQUEST:
+    file_request_send(clients,client_fd,msg, payload);
+    break;
   case  FILE_ACCEPT:
   case  FILE_REJECT:
   case  FILE_SEND:
