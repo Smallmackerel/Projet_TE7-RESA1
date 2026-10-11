@@ -6,7 +6,7 @@
 
 #include "common.h"
 #include "msg_struct.h"
-
+#include "action_seveur.h"
 #include <arpa/inet.h>
 #include <netinet/in.h>
 #include <poll.h>
