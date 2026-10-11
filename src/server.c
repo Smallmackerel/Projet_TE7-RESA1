@@ -1,6 +1,7 @@
 #include "common.h"
 #include "client_list.h"
 #include "msg_struct.h"
+#include "action_serveur.h"
 
 #include <arpa/inet.h>
 #include <netinet/in.h>
@@ -15,6 +16,10 @@
 #define MAX_MESSAGE_SIZE 4096
 #define MAX_CLIENTS 128
 
+
+
+
+
 //met a jour lheure
 void time_update(int client_fd,struct client_info **clients){
   struct client_info** cursor=clients;
@@ -26,7 +31,6 @@ void time_update(int client_fd,struct client_info **clients){
     cursor=&(*cursor)->next;
   }
 }
-
 
 
 int setup_listening_socket(int port) {

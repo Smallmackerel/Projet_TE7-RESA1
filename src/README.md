@@ -11,3 +11,7 @@ make
 ```
 
 Le client attend une adresse IPv4 numérique, par exemple `127.0.0.1` ou `192.168.1.10`. Le serveur écoute sur toutes les interfaces IPv4. Tapez `/quit` dans le client pour fermer sa connexion dans le client.
+
+## Demande de transfert
+
+`/send <pseudo> <nom_de_fichier>` envoie une demande de transfert à un utilisateur connecté. Le destinataire peut répondre `Y` pour envoyer un `FILE_ACCEPT` contenant le port de sa socket d'écoute, ou `N` pour envoyer un `FILE_REJECT`.
