@@ -1,3 +1,5 @@
+#include <stddef.h>
+
 int is_valid_nickname_character(char c);
 int validate_and_copy_nickname(const char *source, size_t nickname_length, char *nickname_destination);
 int extract_nickname_from_argument(const char *argument, char *nickname_destination);
@@ -10,4 +12,6 @@ int send_nickname_info_request(int socket_fd, struct message *s_message, char *m
 int send_broadcast_message(int socket_fd, struct message *s_message, char *message);
 int send_private_message(int socket_fd, struct message *s_message, char *message);
 int send_echo_message(int socket_fd, struct message *s_message, char *message, int message_size);
-int send_send_message(int socket_fd, struct message *s_message, char *message);
+int send_send_message(int socket_fd, struct message *s_message, char *message,
+                      char *file_path, size_t file_path_capacity,
+                      char *recipient, size_t recipient_capacity);

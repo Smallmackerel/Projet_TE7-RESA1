@@ -12,6 +12,8 @@
 #include <unistd.h>
 
 static int file_listen_fd = -1;
+static char pending_file_path[MAX_MESSAGE_SIZE + 1];
+static char pending_file_recipient[NICK_LEN];
 
 int connect_to_server(const char *server_ip, const char *server_port) {
 	int socket_fd;
@@ -73,8 +75,81 @@ static int open_file_listener(unsigned short *port) {
 	return listen_fd;
 }
 
+/*
+ * Reçoit le fichier sur la socket dédiée. Chaque FILE_SEND annonce une
+ * longueur qui est contrôlée avant toute lecture dans le tampon fixe.
+ * Un FILE_SEND de longueur nulle marque la fin du fichier; l'accusé FILE_ACK
+ * n'est envoyé qu'après l'affichage complet des octets reçus.
+ */
+int receive_file_transfer(int listen_fd, const char *filename) { // on peut peut-être l'initialiser en static...
+	struct message chunk_header;
+	char chunk[MAX_MESSAGE_SIZE];
+	int transfer_fd;
+
+	transfer_fd = accept(listen_fd, NULL, NULL);
+	if (transfer_fd < 0) {
+		perror("accept file transfer");
+		return 0;
+	}
+
+	printf("Contenu reçu pour \"%s\" :\n", filename);
+	//fflush(stdout);
+
+	while(1) {
+		if (read_from_socket(transfer_fd, &chunk_header, sizeof(chunk_header)) == 0) {
+			fprintf(stderr, "Connexion interrompue avant la fin du fichier.\n");
+			close(transfer_fd);
+			return 0;
+		}
+		if (chunk_header.type != FILE_SEND || chunk_header.pld_len < 0 || chunk_header.pld_len > MAX_MESSAGE_SIZE) {
+			fprintf(stderr, "Morceau de fichier invalide (type ou longueur).\n");
+			close(transfer_fd);
+			return 0;
+		}
+		if (chunk_header.pld_len == 0) {
+			break;
+		}
+
+		if (read_from_socket(transfer_fd, chunk, (size_t)chunk_header.pld_len) == 0) {
+			fprintf(stderr, "Connexion interrompue au milieu d'un morceau de fichier.\n");
+			close(transfer_fd);
+			return 0;
+		}
+		if (fwrite(chunk, 1, (size_t)chunk_header.pld_len, stdout) !=
+		    (size_t)chunk_header.pld_len) {
+			perror("write received file to stdout");
+			close(transfer_fd);
+			return 0;
+		}
+	}
+	// if (fflush(stdout) == EOF) { // vide le tampon de réception jusqu'au bout et renvoie une erreur si non complet
+	// 	perror("flush received file to stdout");
+	// 	close(transfer_fd);
+	// 	return 0;
+	// }
+
+	/*envoie de l'accusé de réception*/
+	memset(&chunk_header, 0, sizeof(chunk_header));
+	chunk_header.type = FILE_ACK;
+	if (write_in_socket(transfer_fd, &chunk_header, sizeof(chunk_header)) == 0) {
+		fprintf(stderr, "Impossible d'envoyer la confirmation du transfert.\n");
+		close(transfer_fd);
+		return 0;
+	}
+	printf("\nFin de la réception de \"%s\".\n", filename);
+	close(transfer_fd);
+	return 1;
+}
+
+
+//Traite un FILE_REQUEST reçue du serveur. 
+// Réserve le port d'écoute avant le FILE_ACCEPT
+
 int receiving_request(int socket_fd, const struct message *request, const char *filename) {
 	char answer[32];
+	size_t answer_length;
+	char answer_character;
+	ssize_t bytes_read;
 	struct message response;
 	int accepted;
 	unsigned short port = 0;
@@ -85,11 +160,34 @@ int receiving_request(int socket_fd, const struct message *request, const char *
 
 	printf("\"%s\" wants you to accept the transfer of the file named \"%s\". Do you accept? [Y/N].\n",
 	       request->nick_sender, filename);
-	fflush(stdout);
 
 	for (;;) {
-		if (fgets(answer, sizeof(answer), stdin) == NULL) {
-			return 0;
+		/*
+		 * Le reste du client lit stdin avec read() dans la boucle poll.
+		 * Lire ici caractère par caractère évite que fgets() ne mette en
+		 * tampon les commandes suivantes et ne les cache ensuite à poll().
+		 */
+		answer_length = 0;
+		while(1) {
+			bytes_read = read(STDIN_FILENO, &answer_character, 1);
+			if (bytes_read < 0) {
+				perror("read transfer decision");
+				return 0;
+			}
+			if (bytes_read == 0) {
+				return 0;
+			}
+			if (answer_character == '\n') {
+				break;
+			}
+			if (answer_length + 1 < sizeof(answer)) {
+				answer[answer_length++] = answer_character;
+			}
+		}
+		answer[answer_length] = '\0';
+		if (answer_length == 0) {
+			fprintf(stderr, "Please answer Y or N.\n");
+			continue;
 		}
 		if (answer[0] == 'Y' || answer[0] == 'y') {
 			accepted = 1;
@@ -136,11 +234,157 @@ int receiving_request(int socket_fd, const struct message *request, const char *
 
 	if (write_in_socket(socket_fd, &response, sizeof(response)) == 0 ||
 	    write_in_socket(socket_fd, (void *)payload, payload_length) == 0) {
+		if (accepted && file_listen_fd >= 0) {
+			close(file_listen_fd);
+			file_listen_fd = -1;
+		}
 		return 0;
+	}
+	if (accepted) {
+		int transfer_succeeded = receive_file_transfer(file_listen_fd, filename);
+		close(file_listen_fd);
+		file_listen_fd = -1;
+		if (!transfer_succeeded) {
+			fprintf(stderr, "Le transfert de fichier a échoué.\n");
+		}
 	}
 	return 1;
 }
 
+/*
+ * Ouvre le fichier demandé, envoie son contenu par trames FILE_SEND d'au plus
+ * MAX_MESSAGE_SIZE octets, puis attend un FILE_ACK sans charge utile avant de
+ * fermer la connexion directe. L'adresse IP vient du serveur et le port de la
+ * réponse FILE_ACCEPT.
+ */
+static int send_file_to_peer(const struct message *accept_message,
+                             const char *port_payload) {
+	struct sockaddr_in peer_address;
+	struct message chunk_header;
+	char chunk[MAX_MESSAGE_SIZE];
+	char *port_end;
+	unsigned long port;
+	const char *port_character;
+	FILE *file;
+	int transfer_fd;
+
+	if (pending_file_path[0] == '\0' ||
+	    strcmp(accept_message->nick_sender, pending_file_recipient) != 0) {
+		fprintf(stderr, "Réponse FILE_ACCEPT inattendue; aucun fichier en attente.\n");
+		return 1;
+	}
+	port = strtoul(port_payload, &port_end, 10);
+	for (port_character = port_payload; *port_character != '\0'; port_character++) {
+		if (*port_character < '0' || *port_character > '9') {
+			break;
+		}
+	}
+	if (port_payload[0] == '\0' || *port_end != '\0' ||
+	    *port_character != '\0' || port == 0 || port > 65535) {
+		fprintf(stderr, "Port de transfert invalide.\n");
+		pending_file_path[0] = '\0';
+		pending_file_recipient[0] = '\0';
+		return 1;
+	}
+
+	memset(&peer_address, 0, sizeof(peer_address));
+	peer_address.sin_family = AF_INET;
+	peer_address.sin_port = htons((unsigned short)port);
+	if (inet_pton(AF_INET, accept_message->infos, &peer_address.sin_addr) != 1) {
+		fprintf(stderr, "Adresse IPv4 de transfert invalide : %s\n", accept_message->infos);
+		pending_file_path[0] = '\0';
+		pending_file_recipient[0] = '\0';
+		return 1;
+	}
+
+	file = fopen(pending_file_path, "rb");
+	if (file == NULL) {
+		perror("open file for transfer");
+		pending_file_path[0] = '\0';
+		pending_file_recipient[0] = '\0';
+		return 1;
+	}
+	transfer_fd = socket(AF_INET, SOCK_STREAM, 0);
+	if (transfer_fd < 0) {
+		perror("socket for file transfer");
+		fclose(file);
+		pending_file_path[0] = '\0';
+		pending_file_recipient[0] = '\0';
+		return 1;
+	}
+	if (connect(transfer_fd, (struct sockaddr *)&peer_address, sizeof(peer_address)) < 0) {
+		perror("connect for file transfer");
+		close(transfer_fd);
+		fclose(file);
+		pending_file_path[0] = '\0';
+		pending_file_recipient[0] = '\0';
+		return 1;
+	}
+
+	printf("Envoi de \"%s\" à %s...\n", pending_file_path, pending_file_recipient);
+	fflush(stdout);
+	while (!feof(file)) {
+		size_t chunk_length = fread(chunk, 1, sizeof(chunk), file);
+		if (ferror(file)) {
+			perror("read file for transfer");
+			close(transfer_fd);
+			fclose(file);
+			pending_file_path[0] = '\0';
+			pending_file_recipient[0] = '\0';
+			return 1;
+		}
+		if (chunk_length == 0) {
+			break;
+		}
+
+		memset(&chunk_header, 0, sizeof(chunk_header));
+		chunk_header.type = FILE_SEND;
+		chunk_header.pld_len = (int)chunk_length;
+		if (write_in_socket(transfer_fd, &chunk_header, sizeof(chunk_header)) == 0 ||
+		    write_in_socket(transfer_fd, chunk, chunk_length) == 0) {
+			fprintf(stderr, "Échec de l'envoi d'un morceau du fichier.\n");
+			close(transfer_fd);
+			fclose(file);
+			pending_file_path[0] = '\0';
+			pending_file_recipient[0] = '\0';
+			return 1;
+		}
+	}
+	fclose(file);
+
+	/* Une trame vide distingue sans ambiguïté la fin du fichier. */
+	memset(&chunk_header, 0, sizeof(chunk_header));
+	chunk_header.type = FILE_SEND;
+	if (write_in_socket(transfer_fd, &chunk_header, sizeof(chunk_header)) == 0) {
+		fprintf(stderr, "Impossible de signaler la fin du fichier.\n");
+		close(transfer_fd);
+		pending_file_path[0] = '\0';
+		pending_file_recipient[0] = '\0';
+		return 1;
+	}
+
+	if (read_from_socket(transfer_fd, &chunk_header, sizeof(chunk_header)) == 0 ||
+	    chunk_header.type != FILE_ACK || chunk_header.pld_len != 0) {
+		fprintf(stderr, "Confirmation de transfert invalide ou absente.\n");
+		close(transfer_fd);
+		pending_file_path[0] = '\0';
+		pending_file_recipient[0] = '\0';
+		return 1;
+	}
+	printf("Transfert de \"%s\" confirmé par %s.\n",
+	       pending_file_path, pending_file_recipient);
+	fflush(stdout);
+	close(transfer_fd);
+	pending_file_path[0] = '\0';
+	pending_file_recipient[0] = '\0';
+	return 1;
+}
+
+/*
+ * Lit et valide l'en-tête serveur avant de lire son payload dans un tampon fixe.
+ * Les FILE_REQUEST sont transmis à receiving_request; les FILE_ACCEPT déclenchent
+ * l'envoi du fichier en attente. Les autres payloads sont affichés comme avant.
+ */
 int receive_and_print_server_message(int socket_fd) {
     struct message s_message;
     char pld[MAX_MESSAGE_SIZE + 1];
@@ -148,8 +392,14 @@ int receive_and_print_server_message(int socket_fd) {
     if (read_from_socket(socket_fd, &s_message, sizeof(s_message)) == 0)
         return 0;
 
-    if (s_message.pld_len < 0 || s_message.pld_len > MAX_MESSAGE_SIZE)
+    if (s_message.pld_len < 0 || s_message.pld_len > MAX_MESSAGE_SIZE) {
+		fprintf(stderr, "Longueur de message serveur invalide : %d\n", s_message.pld_len);
         return 0;
+	}
+	if (s_message.type == FILE_REQUEST && s_message.pld_len == 0) {
+		fprintf(stderr, "Demande de transfert sans nom de fichier.\n");
+		return 1;
+	}
 
     if (s_message.pld_len > 0) {
         if (read_from_socket(socket_fd, pld, (size_t)s_message.pld_len) == 0)
@@ -159,9 +409,18 @@ int receive_and_print_server_message(int socket_fd) {
 			pld[s_message.pld_len] = '\0';
 			return receiving_request(socket_fd, &s_message, pld);
 		}
+		if (s_message.type == FILE_ACCEPT) {
+			pld[s_message.pld_len] = '\0';
+			return send_file_to_peer(&s_message, pld);
+		}
 
         write(STDOUT_FILENO, pld, (size_t)s_message.pld_len);
 		printf("\n");
+		if (s_message.type == FILE_REJECT &&
+		    strcmp(s_message.nick_sender, pending_file_recipient) == 0) {
+			pending_file_path[0] = '\0';
+			pending_file_recipient[0] = '\0';
+		}
     }
 
     return 1;
@@ -209,7 +468,13 @@ int read_user_input_and_send_to_server(int socket_fd) {
 		return send_private_message(socket_fd, &s_message, message);
 	}
 	else if (strncmp(message, "/send", 5) == 0) {
-		return send_send_message(socket_fd, &s_message, message);
+		if (pending_file_path[0] != '\0') {
+			fprintf(stderr, "Une demande de transfert est déjà en attente.\n");
+			return 1;
+		}
+		return send_send_message(socket_fd, &s_message, message,
+		                         pending_file_path, sizeof(pending_file_path),
+		                         pending_file_recipient, sizeof(pending_file_recipient));
 	}
 	else {
 		return send_echo_message(socket_fd, &s_message, message, message_size);

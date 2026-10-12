@@ -201,12 +201,15 @@ int send_echo_message(int socket_fd, struct message *s_message, char *message, i
 	return 1;
 }
 
-int send_send_message(int socket_fd, struct message *s_message, char *message) {
+int send_send_message(int socket_fd, struct message *s_message, char *message,
+                      char *file_path, size_t file_path_capacity,
+                      char *recipient, size_t recipient_capacity) {
 	char nickname[NICK_LEN];
 	char *nickname_start;
 	char *nickname_end;
 	char *content;
 	size_t content_length;
+	FILE *file_check;
 
 	/* Format attendu : "/send " suivi du pseudo, d'un espace, puis du nom de fichier. */
 	if (strncmp(message, "/send ", 6) != 0) {
@@ -233,6 +236,18 @@ int send_send_message(int socket_fd, struct message *s_message, char *message) {
 		fprintf(stderr, "Usage: /send <nickname> <file_name>\n");
 		return 1;
 	}
+	if (content_length >= file_path_capacity || strlen(nickname) >= recipient_capacity) {
+		fprintf(stderr, "File path or recipient nickname is too long.\n");
+		return 1;
+	}
+	content[content_length] = '\0';
+	/* Vérifier le fichier local avant de demander à l'autre client de patienter. */
+	file_check = fopen(content, "rb");
+	if (file_check == NULL) {
+		perror("open file for transfer");
+		return 1;
+	}
+	fclose(file_check);
 
 	/* Envoi de l'en-tête (pseudo destinataire dans infos), puis du payload. */
 	if (!fill_and_send_message_header(socket_fd, s_message, (int)content_length, "", FILE_REQUEST, nickname)) {
@@ -241,5 +256,8 @@ int send_send_message(int socket_fd, struct message *s_message, char *message) {
 	if (write_in_socket(socket_fd, content, content_length) == 0) {
 		return 0;
 	}
+	memcpy(file_path, content, content_length);
+	file_path[content_length] = '\0';
+	snprintf(recipient, recipient_capacity, "%s", nickname);
 	return 1;
 }

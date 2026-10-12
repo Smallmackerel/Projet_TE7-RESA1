@@ -17,9 +17,6 @@
 #define MAX_CLIENTS 128
 
 
-
-
-
 //met a jour lheure
 void time_update(int client_fd,struct client_info **clients){
   struct client_info** cursor=clients;
@@ -31,7 +28,6 @@ void time_update(int client_fd,struct client_info **clients){
     cursor=&(*cursor)->next;
   }
 }
-
 
 int setup_listening_socket(int port) {
 	int listen_fd;
@@ -102,6 +98,12 @@ int handle_client_message(int client_fd,struct client_info **clients) {
 		time_update(client_fd,clients);
 		return 1;
 		}
+	/* Ne jamais lire un payload négatif ou plus grand que le tampon de réception. */
+	if (info.pld_len < 0 || info.pld_len > MAX_MESSAGE_SIZE) {
+		fprintf(stderr, "Client %d sent an invalid payload length: %d\n",
+		        client_fd, info.pld_len);
+		return 1;
+	}
 	if (info.pld_len == 0){
 	  action(info,clients,client_fd,NULL);
 	  return 0;
