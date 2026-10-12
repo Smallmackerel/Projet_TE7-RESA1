@@ -75,6 +75,9 @@ static int open_file_listener(unsigned short *port) {
 	return listen_fd;
 }
 
+//Reçoit le fichier sur la socket ouverte, FILE_SEND annonce une longueur, un FILE_SEND de longueur nulle annonce une fin de fichier
+
+
 /*
  * Reçoit le fichier sur la socket dédiée. Chaque FILE_SEND annonce une
  * longueur qui est contrôlée avant toute lecture dans le tampon fixe.
@@ -161,12 +164,10 @@ int receiving_request(int socket_fd, const struct message *request, const char *
 	printf("\"%s\" wants you to accept the transfer of the file named \"%s\". Do you accept? [Y/N].\n",
 	       request->nick_sender, filename);
 
-	for (;;) {
-		/*
-		 * Le reste du client lit stdin avec read() dans la boucle poll.
-		 * Lire ici caractère par caractère évite que fgets() ne mette en
-		 * tampon les commandes suivantes et ne les cache ensuite à poll().
-		 */
+	while(1) {
+		
+		// Lit stdin avec read() dans la boucle poll.
+		// lecture caractère par caractère
 		answer_length = 0;
 		while(1) {
 			bytes_read = read(STDIN_FILENO, &answer_character, 1);
