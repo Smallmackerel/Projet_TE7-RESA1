@@ -1,7 +1,7 @@
 #include "common.h"
 #include "msg_struct.h"
-#include "command.h"
 
+#include "command.h"
 #include <arpa/inet.h>
 #include <netinet/in.h>
 #include <poll.h>

@@ -1,3 +1,6 @@
+#ifndef MSG_STRUCT_H
+#define MSG_STRUCT_H
+
 #define NICK_LEN 128
 #define INFOS_LEN 128
 #define MAX_MESSAGE_SIZE 4096
@@ -28,6 +31,7 @@ struct message {
 	char infos[INFOS_LEN];
 };
 
+/*
 static char* msg_type_str[] = {
 	"NICKNAME_NEW",
 	"NICKNAME_LIST",
@@ -46,4 +50,6 @@ static char* msg_type_str[] = {
 	"FILE_SEND",
 	"FILE_ACK"
 };
+*/
+#endif
 
