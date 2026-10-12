@@ -119,17 +119,18 @@ void echo_send(int client_fd, struct message received,char* payload){
 
 void unicast_send(struct client_info **clients, int client_fd, struct message received,char* payload){
     struct client_info** cursor=clients;
-  int size = received.pld_len+NICK_LEN+1;
-  char* payload_n=malloc(size*sizeof(char));
   struct message msg;
-  msg.pld_len = size;
   while(*cursor!=NULL){
     if ((*cursor)->fd==client_fd){
       strcpy(msg.nick_sender,(*cursor)->nick);
-      snprintf(payload_n, sizeof(char)*size,"%s:%s",(*cursor)->nick,payload);
+      break;
     }
     cursor=&(*cursor)->next;
   }
+  int size = received.pld_len+strlen(msg.nick_sender)+1;
+  msg.pld_len = size;
+  char* payload_n=malloc(size*sizeof(char));
+  snprintf(payload_n, sizeof(char)*size,"%s:%s",(*cursor)->nick,payload);
   msg.type = UNICAST_SEND;
   cursor=clients; 
   
@@ -153,17 +154,18 @@ void unicast_send(struct client_info **clients, int client_fd, struct message re
 
 void broadcast_send(struct client_info **clients, int client_fd,struct message received,char* payload){
   struct client_info** cursor=clients;
-  int size = received.pld_len+NICK_LEN+1;
-  char* payload_n=malloc(size*sizeof(char));
   struct message msg;
-  msg.pld_len = size;
   while(*cursor!=NULL){
     if ((*cursor)->fd==client_fd){
       strcpy(msg.nick_sender,(*cursor)->nick);
-      snprintf(payload_n, sizeof(char)*size,"%s:%s",(*cursor)->nick,payload);
+      break;
     }
     cursor=&(*cursor)->next;
   }
+  int size = received.pld_len+strlen(msg.nick_sender)+1;
+  msg.pld_len = size;
+  char* payload_n=malloc(size*sizeof(char));
+  snprintf(payload_n, sizeof(char)*size,"%s:%s",(*cursor)->nick,payload);
   msg.type = BROADCAST_SEND;
   cursor=clients;
   

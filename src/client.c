@@ -225,8 +225,7 @@ int receiving_request(int socket_fd, const struct message *request, const char *
 		payload_length = strlen(payload);
 		response.type = FILE_ACCEPT;
 	} else {
-		snprintf(reject_payload, sizeof(reject_payload),
-		         "\"%s\" doesn't want to accept your file.", request->infos);
+		snprintf(reject_payload, sizeof(reject_payload), "\"%s\" doesn't want to accept your file.", request->infos);
 		payload = reject_payload;
 		payload_length = strlen(payload);
 		response.type = FILE_REJECT;
@@ -258,8 +257,7 @@ int receiving_request(int socket_fd, const struct message *request, const char *
  * fermer la connexion directe. L'adresse IP vient du serveur et le port de la
  * réponse FILE_ACCEPT.
  */
-static int send_file_to_peer(const struct message *accept_message,
-                             const char *port_payload) {
+static int send_file_to_peer(const struct message *accept_message, const char *port_payload) {
 	struct sockaddr_in peer_address;
 	struct message chunk_header;
 	char chunk[MAX_MESSAGE_SIZE];
@@ -353,7 +351,8 @@ static int send_file_to_peer(const struct message *accept_message,
 	}
 	fclose(file);
 
-	/* Une trame vide distingue sans ambiguïté la fin du fichier. */
+	// Une trame vide donne la fin du fichier
+	
 	memset(&chunk_header, 0, sizeof(chunk_header));
 	chunk_header.type = FILE_SEND;
 	if (write_in_socket(transfer_fd, &chunk_header, sizeof(chunk_header)) == 0) {
@@ -433,7 +432,6 @@ int read_user_input_and_send_to_server(int socket_fd) {
 	ssize_t bytes_read;
 	int message_size;
 
-	/* Read up to one message from stdin, then add a terminator for strcmp. */
 	bytes_read = read(STDIN_FILENO, message, MAX_MESSAGE_SIZE);
 	die(bytes_read, "read stdin");
 	if (bytes_read == 0) {
