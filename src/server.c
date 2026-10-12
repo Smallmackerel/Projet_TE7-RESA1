@@ -49,20 +49,51 @@ void file_request_send(struct client_info **clients, int client_fd, struct messa
   struct message msg_back;
   memset(&msg_back, 0, sizeof(msg_back));
   msg_back.pld_len = (int)strlen(msg_error);
-  msg_back.type = UNICAST_SEND;
+  msg_back.type = FILE_REJECT;
+  snprintf(msg_back.nick_sender, sizeof(msg_back.nick_sender), "%s", received.infos);
+  snprintf(msg_back.infos, sizeof(msg_back.infos), "%s", sender_nick);
   if (write_in_socket(client_fd, &msg_back, sizeof(msg_back)) == 0 ||
       write_in_socket(client_fd, (void *)msg_error, (size_t)msg_back.pld_len) == 0) {
     fprintf(stderr, "Failed to report missing file-request recipient.\n");
   }
 }
 
-void file_response_forward(struct client_info **clients, struct message received,
-                           const char *payload) {
+void file_response_forward(struct client_info **clients, int client_fd,
+                           struct message received, const char *payload) {
   struct client_info **cursor = clients;
+  struct client_info *responder = NULL;
+  struct message forwarded = received;
+  char responder_ip[INET_ADDRSTRLEN];
+
+  for (cursor = clients; *cursor != NULL; cursor = &(*cursor)->next) {
+    if ((*cursor)->fd == client_fd) {
+      responder = *cursor;
+      break;
+    }
+  }
+  if (responder == NULL) {
+    fprintf(stderr, "File response came from an unknown client.\n");
+    return;
+  }
+  cursor = clients;
+
+  /*
+   * Le destinataire de la réponse a besoin de l'adresse IP du client qui
+   * écoute directement le transfert. Le pseudo reste dans nick_sender;
+   * infos transporte l'adresse IPv4 pour FILE_ACCEPT.
+   */
+  if (received.type == FILE_ACCEPT) {
+    if (inet_ntop(AF_INET, &responder->address.sin_addr, responder_ip,
+                  sizeof(responder_ip)) == NULL) {
+      perror("inet_ntop for file transfer");
+      return;
+    }
+    snprintf(forwarded.infos, sizeof(forwarded.infos), "%s", responder_ip);
+  }
 
   while (*cursor != NULL) {
     if (strcmp(received.infos, (*cursor)->nick) == 0) {
-      if (write_in_socket((*cursor)->fd, &received, sizeof(received)) == 0 ||
+      if (write_in_socket((*cursor)->fd, &forwarded, sizeof(forwarded)) == 0 ||
           (received.pld_len > 0 &&
            write_in_socket((*cursor)->fd, (void *)payload, (size_t)received.pld_len) == 0)) {
         fprintf(stderr, "Failed to forward file response to %s.\n", (*cursor)->nick);
@@ -263,7 +294,7 @@ void action(struct message msg, struct client_info **clients,int client_fd,char*
     break;
   case  FILE_ACCEPT:
   case  FILE_REJECT:
-    file_response_forward(clients, msg, payload);
+    file_response_forward(clients, client_fd, msg, payload);
     break;
   case MULTICAST_CREATE:
   case MULTICAST_LIST:
@@ -349,6 +380,12 @@ int handle_client_message(int client_fd,struct client_info **clients) {
 		time_update(client_fd,clients);
 		return 1;
 		}
+	/* Ne jamais lire un payload négatif ou plus grand que le tampon de réception. */
+	if (info.pld_len < 0 || info.pld_len > MAX_MESSAGE_SIZE) {
+		fprintf(stderr, "Client %d sent an invalid payload length: %d\n",
+		        client_fd, info.pld_len);
+		return 1;
+	}
 	if (info.pld_len == 0){
 	  action(info,clients,client_fd,NULL);
 	  return 0;

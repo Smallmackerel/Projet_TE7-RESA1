@@ -14,4 +14,6 @@ Le client attend une adresse IPv4 numérique, par exemple `127.0.0.1` ou `192.16
 
 ## Demande de transfert
 
-`/send <pseudo> <nom_de_fichier>` envoie une demande de transfert à un utilisateur connecté. Le destinataire peut répondre `Y` pour envoyer un `FILE_ACCEPT` contenant le port de sa socket d'écoute, ou `N` pour envoyer un `FILE_REJECT`.
+`/send <pseudo> <chemin_du_fichier>` envoie une demande de transfert à un utilisateur connecté. Le fichier doit être lisible par le client émetteur. Le destinataire peut répondre `Y` pour envoyer un `FILE_ACCEPT` contenant le port de sa socket d'écoute, ou `N` pour envoyer un `FILE_REJECT`.
+
+Après acceptation, le transfert se fait directement entre les clients. L'émetteur envoie le contenu sous forme de trames `FILE_SEND` dont le payload ne dépasse jamais `MAX_MESSAGE_SIZE` octets. Une trame `FILE_SEND` de longueur nulle marque la fin du fichier. Le destinataire affiche les octets reçus sur sa sortie standard, puis renvoie une trame `FILE_ACK` vide. À la réception de cet accusé, l'émetteur ferme la connexion de transfert; le destinataire ferme sa socket d'écoute après l'envoi de l'accusé.
